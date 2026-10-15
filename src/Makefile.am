@@ -1,4 +1,4 @@
-AM_CPPFLAGS = -I$(top_srcdir)/include
+AM_CPPFLAGS = -I$(top_srcdir)/include $(BLAS_CFLAGS) $(HPL_BLAS_DEFS)
 
 lib_LIBRARIES = libhpl.a
 

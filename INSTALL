@@ -1,81 +1,86 @@
-==============================================================
- High Performance Computing Linpack Benchmark (HPL)
- HPL - 2.3 - December 2, 2018
-==============================================================
+HPL installation
+================
 
- 1) Retrieve the tar file, then
+Requirements
+------------
+A C compiler, make, ar/ranlib, MPI, and an LP64 BLAS library
+(32-bit integer arguments). Linking a prebuilt BLAS does not require
+a Fortran compiler. ILP64 libraries are not compatible with the default
+HPL interfaces.
 
-    gunzip hpl.tgz; tar -xvf hpl.tar
+Portable GNU Make build
+-----------------------
+From the source root:
 
- this  will create an  hpl  directory,  that we call below the
- top-level directory.
+    cp setup/Make.Generic Make.Generic
+    make -j4 arch=Generic
 
- 2) Create a file Make.<arch> in the  top-level directory. For
- this purpose,  you  may  want  to re-use one contained in the
- setup directory. This file essentially contains the compilers
- and librairies with their paths to be used.
+The executable and input file are bin/Generic/xhpl and
+bin/Generic/HPL.dat. Make.Generic uses mpicc, CBLAS, and OpenBLAS
+flags from pkg-config, with -lopenblas as the fallback.
 
- 3) Type "make arch=<arch>". This  should create an executable
- in the bin/<arch> directory called xhpl.
+CC, CFLAGS, CPPFLAGS, LDFLAGS, BLAS_CFLAGS, and BLAS_LIBS are
+overridable. For a compiler wrapper that supplies MPI and CBLAS:
 
- For example, on our Linux PII cluster, I create a file called
- Make.Linux_PII in the top-level directory. Then, I type
-    "make arch=Linux_PII" 
- This creates the executable file bin/Linux_PII/xhpl.
+    make -j4 arch=Generic CC=cc BLAS_CFLAGS= BLAS_LIBS=
 
- 4) Quick check: run a few tests:
+After changing compilers or flags, clean before rebuilding:
 
-    cd bin/<arch>
-    mpirun -np 4 xhpl
+    make arch=Generic clean
 
- 5) Tuning: Most of the performance  parameters can be tuned,
- by modifying the input file bin/HPL.dat. See the file TUNING
- in the top-level directory.
+Machine-specific configurations are available in setup/. Copy one
+to Make.<arch>, set its paths and flags, and run make arch=<arch>.
 
-==============================================================
+Autotools build
+---------------
+Git checkouts require autoconf and automake to generate configure:
 
- Compile time options:  At the end of the "model" Make.<arch>,
- ---------------------  the  user  is given the opportunity to
- compile the software with some specific compile options.  The
- list of this options and their meaning are:
+    autoreconf -fi
+    mkdir -p build
+    cd build
+    ../configure --with-blas-interface=cblas CFLAGS='-O3'
+    make -j4
 
-    -DHPL_COPY_L
-       force the copy of the panel L before bcast;
+The executable and input file are build/testing/xhpl and
+build/testing/HPL.dat. Configure out-of-source to preserve the
+source root's traditional Makefile.
 
-    -DHPL_CALL_CBLAS
-       call the cblas interface;
+CC or MPICC selects the MPI wrapper. BLAS_CFLAGS supplies header/compiler
+flags; BLAS_LIBS or --with-blas='flags' selects the libraries. An explicit
+BLAS_LIBS, including an empty value, disables library autodetection.
+For wrapper-provided BLAS, use CC=cc BLAS_LIBS=''.
 
-    -DHPL_CALL_VSIPL
-       call the vsip  library;
+--with-blas-interface=f77|cblas selects the interface (default: f77).
+CBLAS requires cblas.h. Without explicit libraries, configure checks
+the compiler wrapper, pkg-config OpenBLAS, and common BLAS libraries.
+PKG_CONFIG=false disables pkg-config lookup.
 
-    -DHPL_DETAILED_TIMING
-       enables detail timers;
+make install installs xhpl under bin and HPL.dat under share/hpl,
+relative to --prefix. make distcheck verifies archive builds and
+installation.
 
- The  user  must  choose  between  either  the BLAS Fortran 77
- interface,  or the  BLAS  C  interface,  or the VSIPL library
- depending on which computational kernels are available on his
- system. Only one of these options should be selected.  If you
- choose the BLAS Fortran 77 interface, it is necessary to fill
- out the machine-specific C to Fortran 77 interface section of
- the  Make.<arch>  file.  To  do this,  please  refer  to  the 
- Make.<arch> examples contained in the setup directory.
+Execution
+---------
+Run from a directory containing HPL.dat:
 
- By default HPL will:
-    *) not copy L before broadcast,
-    *) call the BLAS Fortran 77 interface,
-    *) not display detailed timing information.
+    cd bin/Generic
+    OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 mpirun -np 4 ./xhpl
 
- As an example,  suppose  one wants  HPL  to copy the panel of
- columns  into  a  contiguous buffer  before broadcasting.  In
- theory,  it  would be more efficient to let  HPL  create  the
- appropriate  MPI  user-defined data type since this may avoid 
- the data copy. So, it is a strange idea, but one insists.  To
- achieve this one would add -DHPL_COPY_L  to the definition of
- HPL_OPTS  at the end of the file  Make.<arch>.  Issue  then a
- "make clean arch=<arch>; make build arch=<arch>" and the xhpl
- executable will be re-build with that feature in.
-==============================================================
- 
- Check out  the website  www.netlib.org/benchmark/hpl  for the
- latest information.
-==============================================================
+The supplied input uses four ranks. HPL.dat controls problem sizes,
+block sizes, and process grids; launch enough ranks for the largest
+P*Q. Check the output for failed residual checks and skipped tests;
+the exit code alone does not indicate correctness. On managed clusters,
+run within a compute allocation. See TUNING for performance parameters.
+
+Compile-time options
+--------------------
+HPL_OPTS in Make.<arch>, or CPPFLAGS with Autotools, accepts:
+
+    -DHPL_CALL_CBLAS       C BLAS interface
+    -DHPL_CALL_VSIPL       VSIPL interface
+    -DHPL_COPY_L           Copy the panel before broadcast
+    -DHPL_DETAILED_TIMING  Detailed timers
+
+The default interface is Fortran BLAS unless CBLAS or VSIPL is selected.
+Fortran naming, integer, and string conventions are set with F2CDEFS
+in Make.<arch>; setup/ contains examples. Clean before changing options.

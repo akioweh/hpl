@@ -1,7 +1,15 @@
 
-AM_CPPFLAGS = -I$(top_srcdir)/include
+AM_CPPFLAGS = -I$(top_srcdir)/include $(BLAS_CFLAGS) $(HPL_BLAS_DEFS)
 
-xhpl_LDADD = ../src/libhpl.a
+xhpl_LDADD = ../src/libhpl.a $(BLAS_LIBS) -lm
+
+# Keep the default input beside the out-of-source executable.
+all-local: HPL.dat
+HPL.dat: $(srcdir)/ptest/HPL.dat
+	$(AM_V_GEN)cp $(srcdir)/ptest/HPL.dat $@
+CLEANFILES = HPL.dat
+
+dist_pkgdata_DATA = ptest/HPL.dat
 
 bin_PROGRAMS = xhpl
 

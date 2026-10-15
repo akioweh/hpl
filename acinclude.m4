@@ -1,94 +1,86 @@
+dnl Link only: configuration must also work on cross-compiled HPC systems.
+AC_DEFUN([_HPL_BLAS_LINK], [
+  AS_IF([test "x$with_blas_interface" = xcblas], [
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <cblas.h>]], [[
+      double a = 1.0;
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+                  1, 1, 1, 1.0, &a, 1, &a, 1, 0.0, &a, 1);
+    ]])], [hpl_blas_ok=yes], [hpl_blas_ok=no])
+  ], [
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[extern void dgemm_(void);]],
+                                   [[dgemm_();]])],
+                   [hpl_blas_ok=yes], [hpl_blas_ok=no])
+  ])
+])
 
 AC_DEFUN([HPL_BLAS], [
+  AC_ARG_VAR([BLAS_LIBS], [BLAS linker flags (empty for compiler-provided BLAS)])
+  AC_ARG_VAR([BLAS_CFLAGS], [BLAS header/compiler flags])
+  AC_ARG_VAR([PKG_CONFIG], [pkg-config command, or false to disable metadata lookup])
+  AC_ARG_WITH([blas],
+    [AS_HELP_STRING([--with-blas=FLAGS], [explicit BLAS linker flags])], [
+      AS_CASE([$withval], [yes|no],
+        [AC_MSG_ERROR([--with-blas requires linker flags; use --with-blas='' for compiler-provided BLAS])])
+      BLAS_LIBS=$withval
+    ])
+  AC_ARG_WITH([blas-interface],
+    [AS_HELP_STRING([--with-blas-interface=f77|cblas], [BLAS interface (default: f77)])],
+    [], [with_blas_interface=f77])
+  AS_CASE([$with_blas_interface], [f77|cblas], [],
+    [AC_MSG_ERROR([BLAS interface must be f77 or cblas])])
+  HPL_BLAS_DEFS=
+  AS_IF([test "x$with_blas_interface" = xcblas],
+        [HPL_BLAS_DEFS=-DHPL_CALL_CBLAS])
 
-AC_PREREQ(2.69)
-
-hpl_blas_ok=no
-
-dnl FIXME: add --with-blas="<library spec>"
-
-current_LIBS="$LIBS"
-
-cat <<HPLEOF > hplvars.txt
-name1=OpenBLAS
-rout1=dgemm_
-libs1=-lopenblas -lm
-
-name2=Atlas Fortran BLAS
-rout2=dgemm_
-libs2=-lf77blas -latlas
-
-name3=Sequential Intel MKL LP64 (group)
-rout3=dgemm_
-libs3=-Wl,--start-group -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -Wl,--end-group -lpthread -lm
-
-name4=Sequential Intel MKL LP64
-rout4=dgemm_
-libs4=-lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm
-
-name5=AMD's ACML
-rout5=dgemm_
-libs5=-lacml -lm
-
-name6=Accelerate
-rout6=dgemm_
-libs6=-framework Accelerate
-
-name7=Apple VecLib
-rout7=dgemm_
-libs7=-framework vecLib
-
-name8=IBM ESSL
-rout8=dgemm_
-libs8=-lessl
-
-name9=NVIDIA nvblas
-rout9=dgemm_
-libs9=-lnvblas
-
-name10=BLIS
-rout10=dgemm_
-libs10=-lblis
-
-name11=Generic BLAS
-rout11=dgemm_
-libs11=-lblas
-
-HPLEOF
-for hpl_i in 1 2 3 4 5 6 7 8 9 10 11;
-do
-if test  x$hpl_blas_ok = xno; then
-  name="`grep ^name${hpl_i}= hplvars.txt | sed s/^name${hpl_i}=//`"
-  rout="`grep ^rout${hpl_i}= hplvars.txt | sed s/^rout${hpl_i}=//`"
-  libs="`grep ^libs${hpl_i}= hplvars.txt | sed s/^libs${hpl_i}=//`"
-  AC_MSG_CHECKING([for [$]rout in [$]name])
-
-  LIBS="[$]libs"
-  AC_TRY_LINK_FUNC([$]rout, [hpl_blas_ok=yes;BLAS_LIBS="[$]libs"])
-  LIBS="$current_LIBS"
-
-  AC_MSG_RESULT($hpl_blas_ok)
-fi
-done
-rm hplvars.txt
-
-if test  x$hpl_blas_ok = xno; then
-dnl
-AC_MSG_CHECKING([for dgemm_ in OpenBLAS])
-AC_CHECK_LIB(openblas, dgemm_, [hpl_blas_ok=yes;BLAS_LIBS="-lopenblas"])
-AC_MSG_RESULT($hpl_blas_ok)
-dnl
-fi
-
-AC_SUBST(BLAS_LIBS)
-
-# If present, execute ACTION-IF-FOUND/ACTION-IF-NOT-FOUND:
-if test x"$hpl_blas_ok" = xyes; then
-        ifelse([$1],,AC_DEFINE(HAVE_BLAS,1,[Define if you have a BLAS library.]),[$1])
-        :
-else
-        hpl_blas_ok=no
-        $2
-fi
-
-])dnl HPL_BLAS
+  hpl_save_LIBS=$LIBS
+  hpl_save_CPPFLAGS=$CPPFLAGS
+  CPPFLAGS="$CPPFLAGS $BLAS_CFLAGS"
+  AS_VAR_SET_IF([BLAS_LIBS], [
+    AC_MSG_CHECKING([for $with_blas_interface BLAS with supplied flags])
+    LIBS="$BLAS_LIBS $hpl_save_LIBS"
+    _HPL_BLAS_LINK
+    AC_MSG_RESULT([$hpl_blas_ok])
+  ], [
+    dnl First let compiler wrappers provide BLAS (e.g. Cray LibSci).
+    AC_MSG_CHECKING([for $with_blas_interface BLAS supplied by the compiler])
+    _HPL_BLAS_LINK
+    AC_MSG_RESULT([$hpl_blas_ok])
+    BLAS_LIBS=
+    AS_IF([test "x$hpl_blas_ok" = xno], [
+      AS_IF([test -z "$PKG_CONFIG"], [AC_PATH_TOOL([PKG_CONFIG], [pkg-config])])
+      AS_IF([test -n "$PKG_CONFIG" && $PKG_CONFIG --exists openblas], [
+        hpl_pkg_cflags=`$PKG_CONFIG --cflags openblas`
+        hpl_pkg_libs=`$PKG_CONFIG --libs openblas`
+        CPPFLAGS="$hpl_save_CPPFLAGS $BLAS_CFLAGS $hpl_pkg_cflags"
+        LIBS="$hpl_pkg_libs $hpl_save_LIBS"
+        AC_MSG_CHECKING([for $with_blas_interface BLAS using pkg-config openblas])
+        _HPL_BLAS_LINK
+        AC_MSG_RESULT([$hpl_blas_ok])
+        AS_IF([test "x$hpl_blas_ok" = xyes], [
+          BLAS_CFLAGS="$BLAS_CFLAGS $hpl_pkg_cflags"
+          BLAS_LIBS=$hpl_pkg_libs
+        ])
+      ])
+    ])
+    CPPFLAGS="$hpl_save_CPPFLAGS $BLAS_CFLAGS"
+    dnl Retain fallbacks for installations without pkg-config metadata.
+    for hpl_libs in '-lopenblas -lm' '-lf77blas -latlas' \
+      '-Wl,--start-group -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -Wl,--end-group -lpthread -lm' \
+      '-lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm' \
+      '-lacml -lm' '-framework Accelerate' '-framework vecLib' \
+      '-lessl' '-lnvblas' '-lblis' '-lblas'; do
+      AS_IF([test "x$hpl_blas_ok" = xyes], [break])
+      LIBS="$hpl_libs $hpl_save_LIBS"
+      AC_MSG_CHECKING([for $with_blas_interface BLAS in $hpl_libs])
+      _HPL_BLAS_LINK
+      AC_MSG_RESULT([$hpl_blas_ok])
+      AS_IF([test "x$hpl_blas_ok" = xyes], [BLAS_LIBS=$hpl_libs])
+    done
+  ])
+  LIBS=$hpl_save_LIBS
+  CPPFLAGS=$hpl_save_CPPFLAGS
+  AC_SUBST([BLAS_LIBS])
+  AC_SUBST([BLAS_CFLAGS])
+  AC_SUBST([HPL_BLAS_DEFS])
+  AS_IF([test "x$hpl_blas_ok" = xyes], [$1], [$2])
+])

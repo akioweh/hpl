@@ -6,7 +6,7 @@ AC_CONFIG_HEADERS([include/hplconfig.h])
 
 AC_CONFIG_MACRO_DIR([m4])
 
-AX_PROG_CC_MPI
+AX_PROG_CC_MPI([], [], [AC_MSG_ERROR([MPI C compiler not found; set CC or MPICC to an MPI compiler wrapper])])
 
 AC_PROG_RANLIB
 
@@ -14,21 +14,9 @@ AC_PROG_INSTALL
 
 AM_INIT_AUTOMAKE([subdir-objects])
 
-AM_PROG_CC_STDC
-AM_PROG_CC_C_O
+AM_PROG_AR
 
-dnl
-dnl AX_BLAS requires Fortran compiler and detects fortran libraries in $FLIBS
-dnl
-dnl AX_BLAS(LIBS="$BLAS_LIBS $LIBS $FLIBS")
-dnl
-
-HPL_BLAS(LIBS="$BLAS_LIBS $LIBS",AC_MSG_ERROR([BLAS not found]))
-
-dnl FIXME: test for CBLAS: Atlas, MKL, OpenBLAS, ESSL, ...
-dnl FIXME: test for GSL CBLAS
-
-AC_CHECK_FUNCS([dgemm_])
+HPL_BLAS([], [AC_MSG_ERROR([BLAS not found for the selected interface; set BLAS_CFLAGS and BLAS_LIBS or use --with-blas=FLAGS])])
 
 AC_CHECK_HEADER([mpi.h], [], AC_MSG_ERROR([MPI not found]))
 

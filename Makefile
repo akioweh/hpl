@@ -55,7 +55,10 @@ all              : install
 #
 # ######################################################################
 #
-install          : startup refresh build
+.PHONY: all install startup refresh build clean clean_arch clean_arch_all clean_guard
+# Initialization must finish before compilation, including under make -j.
+install          : startup
+	$(MAKE) build arch=$(arch)
 #
 startup          :
 	$(MAKE) -f Make.top startup_dir     arch=$(arch)

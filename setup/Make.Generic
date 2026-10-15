@@ -1,0 +1,45 @@
+# Portable GNU Make configuration: copy to the HPL root as Make.Generic.
+# Uses an MPI C wrapper and an LP64 (32-bit integer) CBLAS library.
+# Override CC=cc BLAS_CFLAGS= BLAS_LIBS= for wrapper-provided MPI/BLAS.
+
+SHELL = /bin/sh
+CD = cd
+CP = cp
+LN_S = ln -s
+MKDIR = mkdir -p
+RM = rm -f
+TOUCH = touch
+
+ARCH = $(arch)
+# realpath resolves the Make.inc symlinks used by recursive builds.
+TOPdir := $(patsubst %/,%,$(dir $(realpath $(lastword $(MAKEFILE_LIST)))))
+INCdir = $(TOPdir)/include
+BINdir = $(TOPdir)/bin/$(ARCH)
+LIBdir = $(TOPdir)/lib/$(ARCH)
+HPLlib = $(LIBdir)/libhpl.a
+
+ifeq ($(origin CC),default)
+CC = mpicc
+endif
+CC ?= mpicc
+LINKER ?= $(CC)
+PKG_CONFIG ?= pkg-config
+BLAS_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags openblas 2>/dev/null)
+BLAS_LIBS ?= $(shell $(PKG_CONFIG) --libs openblas 2>/dev/null || printf '%s' '-lopenblas')
+MPinc =
+MPlib =
+LAinc = $(BLAS_CFLAGS)
+LAlib = $(BLAS_LIBS)
+
+F2CDEFS =
+HPL_OPTS ?= -DHPL_CALL_CBLAS
+HPL_INCLUDES = -I$(INCdir) -I$(INCdir)/$(ARCH) $(LAinc) $(MPinc)
+HPL_DEFS = $(CPPFLAGS) $(F2CDEFS) $(HPL_OPTS) $(HPL_INCLUDES)
+HPL_LIBS = $(HPLlib) $(LAlib) $(MPlib) -lm
+CFLAGS ?= -O3
+CCNOOPT = $(HPL_DEFS)
+CCFLAGS = $(HPL_DEFS) $(CFLAGS)
+LINKFLAGS = $(CFLAGS) $(LDFLAGS)
+ARCHIVER = ar
+ARFLAGS = rcs
+RANLIB = ranlib
